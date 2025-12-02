@@ -21,6 +21,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
+
 # -------------------- DB --------------------
 conn = sqlite3.connect("filestore.db")
 cur = conn.cursor()
@@ -38,12 +39,20 @@ conn.commit()
 
 # -------------------- COMMANDS --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    
+    # deep-link?  /start CODE
+    if len(args) == 1:
+        return await send_deeplink(update, context, args[0])
+
+    # normal start
     await update.message.reply_text(
-        "Hello! Send a file and then use:\n"
-        "/filestore – to generate link for that file\n"
-        "/batch – to start batch mode\n"
-        "/batchdone – finish batch"
+        "Hello! Send a file then use:\n"
+        "filestore – generate link for that file\n"
+        "batch – start batch mode\n"
+        "batchdone – finish batch"
     )
+
 
 async def filestore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
@@ -53,6 +62,9 @@ async def filestore(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     code = os.urandom(4).hex()
     file_id, caption, file_type = extract_file(msg)
+
+    if not file_id:
+        return await update.message.reply_text("Unsupported file!")
 
     cur.execute("INSERT INTO files VALUES (?, ?, ?, ?)",
                 (code, file_id, caption, file_type))
@@ -79,10 +91,8 @@ def extract_file(msg):
     return None, None, None
 
 
-# -------------------- START PARAM HANDLER --------------------
-async def deep_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    code = context.args[0]
-
+# -------------------- DEEP LINK HANDLER --------------------
+async def send_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, code):
     cur.execute("SELECT file_id, caption, file_type FROM files WHERE code=?", (code,))
     row = cur.fetchone()
     if not row:
@@ -112,9 +122,9 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("filestore", filestore))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^/start "), deep_link))
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
